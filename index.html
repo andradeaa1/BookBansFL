@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Florida Book Bans (2021-22)</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.7.0/dist/leaflet.css"/>
+    <style>
+        body, html {
+            margin: 0;
+            padding: 0;
+            height: 100%;
+        }
+        #map { 
+            width: 100%; 
+            height: 100vh; /* Adjusted to occupy full viewport height */
+        }
+        .info {            
+            position: absolute;
+            top: 50px;
+            right: 10px;
+            background: rgba(255, 255, 255, 0.8);
+            padding: 10px;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+            z-index: 1000;
+            width: 200px; /* Adjust width as needed */
+            max-width: 300px; /* Maximum width to prevent cutting text */
+        }          
+
+        h1, h2 {
+            text-align: center;
+            position: absolute;
+            z-index: 1000;
+            padding: 10px;
+            color: white;
+            background-color: red;
+            width: 100%; /* Full width */
+            border-radius: 0; /* Remove border-radius */
+        }
+
+        h1 {
+            top: 0;
+            left: 0;
+            margin: 0; /* Remove margin */
+        }
+
+        h2 {
+            bottom: 0;
+            left: 0;
+            margin: 0; /* Remove margin */
+        }
+
+        .legend {
+            position: absolute;
+            bottom: 120px;
+            right: 30px;
+            z-index: 1000;
+            background: rgba(255, 255, 255, 0.8);
+            padding: 10px;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+        }
+        .legend-title {
+            font-weight: bold;
+            margin-bottom: 5px;
+        }
+        .legend-item {
+            margin-bottom: 5px;
+        }
+        .legend-color {
+            display: inline-block;
+            width: 20px;
+            height: 10px;
+            margin-right: 5px;
+        }
+    </style>
+</head>
+<body>
+<h1>Florida Book Bans (2022-23)</h1>
+<h2>For each school district on this map, the number of banned books was analyzed for the year 2022-2023. The list of book bans comes from Pen America <a href="https://pen.org/2023-banned-book-list/">here</a>.</h2>
+
+<div id="map"></div>
+<div class="legend">
+    <div class="legend-title">Legend</div>
+    <div class="legend-item"><span class="legend-color" style="background: #fff;"></span>0 bans</div>
+    <div class="legend-item"><span class="legend-color" style="background: #fee5d9;"></span>1 - 49 bans</div>
+    <div class="legend-item"><span class="legend-color" style="background: #fcae91;"></span>50 - 99 bans</div>
+    <div class="legend-item"><span class="legend-color" style="background: #fb6a4a;"></span>100 - 199 bans</div>
+    <div class="legend-item"><span class="legend-color" style="background: #de2d26;"></span>200 - 299 bans</div>
+    <div class="legend-item"><span class="legend-color" style="background: #a50f15;"></span>300 - 402 bans</div>
+</div>
+<script src="https://unpkg.com/leaflet@1.7.0/dist/leaflet.js"></script>
+<script src="https://ajax.googleapis.com/ajax/libs/jquery/3.1.0/jquery.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet-ajax/2.1.0/leaflet.ajax.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/chroma-js/2.1.1/chroma.min.js"></script>
+
+<script>
+// Create map object
+var mymap = L.map('map',{
+    minZoom:6,
+    maxZoom:10
+}).setView([27.994402, -81.760254], 7);
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(mymap);
+
+// Define class breaks and colors
+var grades = [0, 1, 50, 100, 200, 300, 403];
+var colors = chroma.scale('Reds').colors(grades.length - 1);
+
+// Get color based on the class of the input value            
+function getColor(d) {
+    for (var i = 0; i < grades.length - 1; i++) {
+        if (d >= grades[i] && d < grades[i + 1]) {
+            return colors[i];
+        }
+    }
+    return colors[grades.length - 1];
+}
+
+function style(feature) {
+    return {
+        weight: 2,
+        opacity: 1,
+        color: 'grey',
+        fillOpacity: 0.7,
+        fillColor: getColor(feature.properties.TotalBans)
+    };
+}
+
+// Load GeoJSON file
+$.getJSON("assets/Florida.geojson", function(data) {
+    geojson = L.geoJSON(data, {
+    style: style,
+    onEachFeature: onEachFeature
+}).addTo(mymap);
+});
+
+var geojson;
+
+// Function to highlight feature on mouseover
+function highlightFeature(e) {
+    var layer = e.target;
+    layer.setStyle({
+        weight: 5,
+        color: '#666',
+        dashArray: '',
+        fillOpacity: 0.7
+    });
+    if (!L.Browser.ie && !L.Browser.opera && !L.Browser.edge) {
+        layer.bringToFront();
+    }
+    info.update(layer.feature.properties);
+}
+
+// Function to reset highlight on mouseout
+function resetHighlight(e) {
+    geojson.resetStyle(e.target);
+    info.update();
+}
+
+// Function to zoom to feature on click
+function zoomToFeature(e) {
+    mymap.fitBounds(e.target.getBounds());
+}
+
+// Function to add events to each feature
+function onEachFeature(feature, layer) {
+    layer.on({
+        mouseover: highlightFeature,
+        mouseout: resetHighlight,
+        click: zoomToFeature
+    });
+}
+
+// Create a control for the info box
+var info = L.control();
+
+info.onAdd = function (map) {
+    this._div = L.DomUtil.create('div', 'info');
+    this.update();
+    return this._div;
+};
+
+info.update = function (props) {
+    this._div.innerHTML = '<h4> School District Book Bans</h4>' +  (props ? + props.TotalBans + ' bans' : 'Hover over a district');
+};
+
+info.addTo(mymap);
+// 5. create the credits
+// Add attribution control
+var attribution = L.control.attribution({
+    position: 'bottomright' // Set the position to bottom right
+}).addTo(mymap);
+
+// Add attribution text
+attribution.addAttribution('School Districts; <a href="https://catalog.data.gov/dataset/2019-cartographic-boundary-shapefile-current-unified-school-district-for-florida-1-5000001">Data.gov</a> | Book Bans across the US; <a href="https://pen.org/2023-banned-book-list/">Pen America</a> | This map is made by Angela Andrade');
+document.querySelector('.leaflet-control-attribution').style.bottom = '10px'
+</script>
+</body>
+</html>
